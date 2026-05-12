@@ -385,7 +385,9 @@
       "byrow": "BYROW",
       "map": "MAP",
       "reduce": "REDUCE",
-      "scan": "SCAN"
+      "scan": "SCAN",
+      "stdev_legacy": "STDEV",
+      "norminv_legacy": "NORMINV"
     }
   },
    "it": {
@@ -774,7 +776,9 @@
       "byrow": "BYROW",
       "map": "MAP",
       "reduce": "REDUCE",
-      "scan": "SCAN"
+      "scan": "SCAN",
+      "stdev_legacy": "DEV.ST",
+      "norminv_legacy": "INV.NORM"
     }
   },
   "fr": {
@@ -1163,7 +1167,9 @@
       "byrow": "BYROW",
       "map": "MAP",
       "reduce": "REDUCE",
-      "scan": "SCAN"
+      "scan": "SCAN",
+      "stdev_legacy": "ECARTYPE",
+      "norminv_legacy": "LOI.NORMALE.INVERSE"
     }
   },
   "de": {
@@ -1552,7 +1558,9 @@
       "byrow": "BYROW",
       "map": "MAP",
       "reduce": "REDUCE",
-      "scan": "SCAN"
+      "scan": "SCAN",
+      "stdev_legacy": "STABW",
+      "norminv_legacy": "NORMINV"
     }
   },
   "es": {
@@ -1941,7 +1949,9 @@
       "byrow": "BYROW",
       "map": "MAP",
       "reduce": "REDUCE",
-      "scan": "SCAN"
+      "scan": "SCAN",
+      "stdev_legacy": "DESVEST",
+      "norminv_legacy": "DISTR.NORM.INV"
     }
   }
 }
