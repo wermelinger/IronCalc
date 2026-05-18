@@ -896,9 +896,11 @@ impl<'a> Model<'a> {
                     // Scalar formula produced an array at runtime. We only coerce safely
                     // when the array is 1x1 (the result is genuinely a single value just
                     // wrapped in an array). For larger arrays, Excel would apply implicit
-                    // intersection (legacy) or auto-spill (dynamic arrays); neither is
-                    // implemented here, so picking [0][0] could silently produce wrong
-                    // results. Emit #VALUE! instead so the divergence is visible.
+                     // intersection (legacy) or, for formulas identified as dynamic/array
+                     // at parse time, auto-spill. In this `original_range == None` path we
+                     // do not have that array/dynamic context, so neither behavior is
+                     // available here; picking [0][0] could silently produce wrong results.
+                     // Emit #VALUE! instead so the divergence is visible.
                     let coerced = if array_width == 1 && array_height == 1 {
                         match self.get_value_from_array(array, 1, 1) {
                             Some(node) => array_node_to_formula_value(node),
@@ -909,6 +911,19 @@ impl<'a> Model<'a> {
                             },
                         }
                     } else {
+                        // Currently unreachable from normal user formulas: static
+                        // analysis wraps array-returning subexpressions in scalar
+                        // contexts in implicit intersection (`@`), which collapses
+                        // them to a single value before they reach the cell. If we
+                        // ever get here, static analysis or implicit-intersection
+                        // insertion has regressed.
+                        debug_assert!(
+                            false,
+                            "Larger-than-1x1 array reached scalar-context cell \
+                             (sheet={sheet}, row={row}, column={column}, \
+                             {array_width}x{array_height}); implicit intersection \
+                             was expected to collapse it.",
+                        );
                         FormulaValue::Error {
                             ei: Error::VALUE,
                             o: "".to_string(),
@@ -1358,16 +1373,50 @@ impl<'a> Model<'a> {
                 // return the result of the evaluation.
                 match result {
                     CalcResult::Array(a) => {
-                        // If it is an array, we return the value of the first cell
-                        match a[0][0] {
-                            ArrayNode::Number(n) => CalcResult::Number(n),
-                            ArrayNode::Boolean(b) => CalcResult::Boolean(b),
-                            ArrayNode::String(ref s) => CalcResult::String(s.clone()),
-                            ArrayNode::Error(ref error) => {
-                                let message = error.to_localized_error_string(self.language);
-                                CalcResult::new_error(error.clone(), cell_reference, message)
+                        // The cell ended up holding an array. Coerce it to a scalar so
+                        // that dependents observe the same value `set_cells_with_result`
+                        // wrote into the cell:
+                        //   * Array formula anchor (CSE/Dynamic): return a[0][0] (the
+                        //     anchor's "first cell" value, matching the existing model).
+                        //   * Plain scalar formula: 1x1 -> unwrap to the single value;
+                        //     larger -> `#VALUE!`. This must mirror the coercion in
+                        //     `set_cells_with_result` so that dependents evaluated via
+                        //     `ReferenceKind -> evaluate_cell` in the same recalculation
+                        //     pass do not observe a different value than what is stored.
+                        let is_array_formula = matches!(original_cell, Cell::ArrayFormula { .. });
+                        let array_height = a.len();
+                        let array_width = if array_height > 0 { a[0].len() } else { 0 };
+                        if !is_array_formula && (array_width != 1 || array_height != 1) {
+                            // Currently unreachable from normal user formulas: static
+                            // analysis wraps array-returning subexpressions in scalar
+                            // contexts in implicit intersection (`@`), which collapses
+                            // them to a single value before they reach the cell. If we
+                            // ever get here, static analysis or implicit-intersection
+                            // insertion has regressed. Mirrors the assertion in
+                            // `set_cells_with_result` so that the cell value and the
+                            // value observed by in-pass dependents stay consistent.
+                            debug_assert!(
+                                false,
+                                "Larger-than-1x1 array reached scalar-context cell \
+                                 ({cell_reference:?}, {array_width}x{array_height}); \
+                                 implicit intersection was expected to collapse it.",
+                            );
+                            CalcResult::new_error(
+                                Error::VALUE,
+                                cell_reference,
+                                "Array result in scalar context".to_string(),
+                            )
+                        } else {
+                            match a[0][0] {
+                                ArrayNode::Number(n) => CalcResult::Number(n),
+                                ArrayNode::Boolean(b) => CalcResult::Boolean(b),
+                                ArrayNode::String(ref s) => CalcResult::String(s.clone()),
+                                ArrayNode::Error(ref error) => {
+                                    let message = error.to_localized_error_string(self.language);
+                                    CalcResult::new_error(error.clone(), cell_reference, message)
+                                }
+                                ArrayNode::Empty => CalcResult::EmptyCell,
                             }
-                            ArrayNode::Empty => CalcResult::EmptyCell,
                         }
                     }
                     _ => result,

@@ -51,3 +51,40 @@ fn concat() {
     assert_eq!(model._get_text("A1"), *"Hello");
     assert_eq!(model._get_text("A2"), *"Hello world!");
 }
+
+#[test]
+fn scalar_context_unwraps_1x1_array_from_offset() {
+    // When a non-array formula produces a 1x1 array (e.g. via OFFSET), the
+    // unwrapped scalar must be the value stored in the cell.
+    let mut model = new_empty_model();
+    model._set("B1", "10");
+    model._set("B2", "20");
+    model._set("B3", "30");
+
+    model._set("A1", "=2 * IF(TRUE, OFFSET(B1, 2, 0), 0)");
+
+    model.evaluate();
+
+    assert_eq!(model._get_text("A1"), "60".to_string());
+}
+
+#[test]
+fn scalar_context_unwraps_1x1_array_from_offset_for_dependents() {
+    // When a non-array formula produces a 1x1 array (e.g. via OFFSET), the
+    // unwrapped scalar must be visible to dependents that are evaluated in the
+    // same recalculation pass via `ReferenceKind -> evaluate_cell(...)`.
+    let mut model = new_empty_model();
+    model._set("B1", "10");
+    model._set("B2", "20");
+    model._set("B3", "30");
+
+    model._set("A1", "=IF(TRUE, OFFSET(B1, 2, 0), 0)");
+    model._set("C1", "=A1 + 1");
+    model._set("D1", "=A1");
+
+    model.evaluate();
+
+    assert_eq!(model._get_text("A1"), "30".to_string());
+    assert_eq!(model._get_text("C1"), "31".to_string());
+    assert_eq!(model._get_text("D1"), "30".to_string());
+}
